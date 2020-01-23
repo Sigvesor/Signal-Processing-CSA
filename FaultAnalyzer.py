@@ -7,16 +7,18 @@ Created on Mon Jan 22 12:14:10 2020
 import pandas as pd
 import scipy as sp
 import matplotlib.pyplot as plt
+import pickle
 
 
 class FaultAnalyzer:
-    def __init__(self):
+    def __init__(self, run_fft=False):
         self.fault1 = pd.read_pickle('fault1.pickle')
         self.fault2 = pd.read_pickle('fault2.pickle')
         self.fault3 = pd.read_pickle('fault3.pickle')
         self.healthy = pd.read_pickle('data_healthy.pickle')
         self.data_names = ['h', 'f1', 'f2', 'f3']
         self.data_fft = {}
+        self.vib = 48.8
 
         h_time = self.healthy['t']
         f1_time = self.fault1['t']
@@ -51,10 +53,13 @@ class FaultAnalyzer:
         print('         sample time  | sample length \n' +
               'healthy |   ' + str(h_sp) + '     |  ' + str(h_n) + '\n' +
               'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
-              'fault2   |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
+              'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
               'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
-
-        self.run_fft()
+        if run_fft:
+            self.run_fft()
+        else:
+            with open('data_fft.pickle', 'rb') as handle:
+                self.data_fft = pickle.load(handle)
 
     def run_fft(self):
         data = {
@@ -80,6 +85,8 @@ class FaultAnalyzer:
             self.data_fft[item] = self.data_fft[item].loc[
                 (self.data_fft[item]['freq'] <= 500)
             ].reset_index(drop=True)
+        with open('data_fft.pickle', 'wb') as handle:
+            pickle.dump(self.data_fft, handle)
 
     def plot_all_faults(self):
         plt.figure()
@@ -123,6 +130,28 @@ class FaultAnalyzer:
         ax.set_xlabel('frequencies')
         ax.legend(loc='upper right')
         ax.grid('on')
+        self._additional_plot_instructions(ax, self.vib)
         plt.xlim([-5, 100])
         plt.ylim([-.005, 1.2 * mx])
         plt.show()
+
+    def _additional_plot_instructions(self, ax, *data):
+        """Plot related, manages additional plotting instructions."""
+        self._axvlines(
+            data[0],
+            ax=ax,
+            color='r',
+            linestyle='--',
+            lw=.5,
+            # label=label_text,
+        )
+
+    def _axvlines(self, xs, ax=None, **plot_kwargs):
+        """Plot related, creates vertical indicator lines."""
+        xs = sp.array((xs,) if sp.isscalar(xs) else xs, copy=False)
+        lims = ax.get_ylim()
+        x_points = sp.repeat(xs[:, None], repeats=3, axis=1).flatten()
+        y_points = sp.repeat(sp.array(lims + (sp.nan,))[None, :],
+                             repeats=len(xs), axis=0).flatten()
+        plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
+        return plot
