@@ -6,6 +6,7 @@ Created on Mon Jan 22 12:14:10 2020
 
 import pandas as pd
 import scipy as sp
+import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 
@@ -27,7 +28,7 @@ class FaultAnalyzer:
         self.time = {
             'h': h_time,
             'f1': f1_time,
-            'f2': f1_time,
+            'f2': f2_time,
             'f3': f3_time,
         }
         h_n = h_time.count()
@@ -77,7 +78,8 @@ class FaultAnalyzer:
                 fft = abs(fft[range(int(le / 2))])
                 tmp_fft.append(fft[:])
             self.data_fft[item] = pd.DataFrame({
-                'freq': sp.arange(int(le / 2)) / le / self.data_sp[item],
+                # 'freq': sp.arange(int(le / 2)) / le / self.data_sp[item],
+                'freq': np.fft.fftfreq(self.data_n[item], d=self.data_sp[item])[range(int(le / 2))],
                 'ia': tmp_fft[0],
                 'ib': tmp_fft[1],
                 'ic': tmp_fft[2],
@@ -89,7 +91,7 @@ class FaultAnalyzer:
             pickle.dump(self.data_fft, handle)
 
     def plot_all_faults(self):
-        plt.figure()
+        # plt.figure()
         ax = {}
         data_plot = {}
         mx = {}
@@ -109,24 +111,31 @@ class FaultAnalyzer:
             ax[item].grid('on')
             plt.xlim([-5, 100])
             plt.ylim([-.005, 1.1 * mx[item]])
-            plt.show()
+        plt.show()
 
     def plot_fault_in_one(self, item='ia'):
         plt.figure()
         ax = plt.axes()
         data_plot = pd.DataFrame({
-            'freq': self.data_fft['h']['freq'].loc[(self.data_fft['h']['freq'] <= 500)],
+            # 'freq': self.data_fft['h']['freq'].loc[(self.data_fft['h']['freq'] <= 500)],
+            'freq_h': self.data_fft['h']['freq'].loc[(self.data_fft['h']['freq'] <= 500)],
+            'freq_f1': self.data_fft['f1']['freq'].loc[(self.data_fft['f1']['freq'] <= 500)],
+            'freq_f2': self.data_fft['f2']['freq'].loc[(self.data_fft['f2']['freq'] <= 500)],
+            'freq_f3': self.data_fft['f3']['freq'].loc[(self.data_fft['f3']['freq'] <= 500)],
             str('h_' + item): self.data_fft['h'][item].loc[(self.data_fft['h']['freq'] <= 500)],
             str('f1_' + item): self.data_fft['f1'][item].loc[(self.data_fft['f1']['freq'] <= 500)],
             str('f2_' + item): self.data_fft['f2'][item].loc[(self.data_fft['f2']['freq'] <= 500)],
             str('f3_' + item): self.data_fft['f3'][item].loc[(self.data_fft['f3']['freq'] <= 500)],
         })
-        mx = data_plot.iloc[2:, 1:4].max().max()
-        data_plot.plot(
-            ax=ax,
-            x='freq',
-            y=data_plot.keys()[1:],
-        )
+        mx = data_plot.iloc[2:, 4:].max().max()
+        for name in self.data_names:
+            data_plot.plot(
+                ax=ax,
+                # x=['freq_h', 'freq_f1', 'freq_f2', 'freq_f3'],
+                x=str('freq_' + name),
+                y=str(name + '_' + item),
+            )
+            # plt.hold(True)
         ax.set_xlabel('frequencies')
         ax.legend(loc='upper right')
         ax.grid('on')
