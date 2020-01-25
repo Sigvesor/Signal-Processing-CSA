@@ -164,3 +164,5 @@ class FaultAnalyzer:
                              repeats=len(xs), axis=0).flatten()
         plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
         return plot
+
+
