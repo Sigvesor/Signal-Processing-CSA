@@ -17,9 +17,17 @@ class FaultAnalyzer:
         self.fault2 = pd.read_pickle('fault2.pickle')
         self.fault3 = pd.read_pickle('fault3.pickle')
         self.healthy = pd.read_pickle('data_healthy.pickle')
-        self.data_names = ['h', 'f1', 'f2', 'f3']
+        self.def_data_names = ['h', 'f1', 'f2', 'f3']
         self.data_fft = {}
-        self.vib = 48.8
+        self.data_fft_db = {}
+        self.freq_elec = {'freq_r': 48.8}
+        self.freq_mech = 1420/60
+        self.fault_vib = {
+            'inner': 5.4152,  # inner ring
+            'outer': 3.5848,  # outer ring
+            'cage': 0.39828,  # cage train
+            'roll': 4.7135,  # rolling element
+        }
 
         h_time = self.healthy['t']
         f1_time = self.fault1['t']
@@ -69,7 +77,7 @@ class FaultAnalyzer:
             'f2': self.fault2.transpose().iloc[1:].to_numpy(),
             'f3': self.fault3.transpose().iloc[1:].to_numpy(),
         }
-        for item in self.data_names:
+        for item in self.def_data_names:
             tmp = data[item]
             tmp_fft = []
             le = self.data_n[item]
@@ -78,7 +86,6 @@ class FaultAnalyzer:
                 fft = abs(fft[range(int(le / 2))])
                 tmp_fft.append(fft[:])
             self.data_fft[item] = pd.DataFrame({
-                # 'freq': sp.arange(int(le / 2)) / le / self.data_sp[item],
                 'freq': np.fft.fftfreq(self.data_n[item], d=self.data_sp[item])[range(int(le / 2))],
                 'ia': tmp_fft[0],
                 'ib': tmp_fft[1],
@@ -87,15 +94,17 @@ class FaultAnalyzer:
             self.data_fft[item] = self.data_fft[item].loc[
                 (self.data_fft[item]['freq'] <= 500)
             ].reset_index(drop=True)
+            # for key in self.data_fft:
+            #     self.data_fft_db[key] = self.data_fft[key].apply(lambda x: 20*np.log(x))
         with open('data_fft.pickle', 'wb') as handle:
             pickle.dump(self.data_fft, handle)
 
-    def plot_all_faults(self):
+    def plot_all_faults(self, logy=True):
         # plt.figure()
         ax = {}
         data_plot = {}
         mx = {}
-        for item in self.data_names:
+        for item in self.def_data_names:
             plt.figure()
             ax[item] = plt.axes()
             data_plot[item] = self.data_fft[item]
@@ -104,56 +113,83 @@ class FaultAnalyzer:
                 ax=ax[item],
                 x='freq',
                 y=['ia', 'ib', 'ic'],
-                title=str(item)
+                title=str(item),
+                logy=logy
             )
             ax[item].set_xlabel('frequencies')
             ax[item].legend()
             ax[item].grid('on')
-            plt.xlim([-5, 100])
+            plt.xlim([-5, 150])
             plt.ylim([-.005, 1.1 * mx[item]])
         plt.show()
 
-    def plot_fault_in_one(self, item='ia'):
-        plt.figure()
-        ax = plt.axes()
-        data_plot = pd.DataFrame({
-            # 'freq': self.data_fft['h']['freq'].loc[(self.data_fft['h']['freq'] <= 500)],
-            'freq_h': self.data_fft['h']['freq'].loc[(self.data_fft['h']['freq'] <= 500)],
-            'freq_f1': self.data_fft['f1']['freq'].loc[(self.data_fft['f1']['freq'] <= 500)],
-            'freq_f2': self.data_fft['f2']['freq'].loc[(self.data_fft['f2']['freq'] <= 500)],
-            'freq_f3': self.data_fft['f3']['freq'].loc[(self.data_fft['f3']['freq'] <= 500)],
-            str('h_' + item): self.data_fft['h'][item].loc[(self.data_fft['h']['freq'] <= 500)],
-            str('f1_' + item): self.data_fft['f1'][item].loc[(self.data_fft['f1']['freq'] <= 500)],
-            str('f2_' + item): self.data_fft['f2'][item].loc[(self.data_fft['f2']['freq'] <= 500)],
-            str('f3_' + item): self.data_fft['f3'][item].loc[(self.data_fft['f3']['freq'] <= 500)],
-        })
-        mx = data_plot.iloc[2:, 4:].max().max()
-        for name in self.data_names:
-            data_plot.plot(
-                ax=ax,
-                # x=['freq_h', 'freq_f1', 'freq_f2', 'freq_f3'],
-                x=str('freq_' + name),
-                y=str(name + '_' + item),
+    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, logy=False, ):
+        """Plotting selected phases of all assigned data sets into one graph.
+
+        Parameters
+        ----------
+        item: str
+            Phase (current) to be displayed.
+        data_names: list of str
+            Data series (faults and/or healthy) to be displayed.
+        x_limit: float
+            Outer right limit for x axis.
+        logy: bool
+            Logarithmic display of y values. Deprecated.
+        """
+        fig, (ax1, ax2) = plt.subplots(2, 1)
+        data_plot = {}
+        data = self.data_fft
+        mx = 0
+        mi = 0
+        for key in data_names:
+            data_plot[key] = pd.DataFrame({
+                str('freq_' + key): data[key]['freq'].loc[(data[key]['freq'] <= 500)],
+                str(key + '_' + item): data[key][item].loc[(data[key]['freq'] <= 500)],
+            })
+            mx_tmp = data[key][item][2:].max()
+            mi_tmp = data[key][item].min()
+            mx = mx_tmp if mx_tmp > mx else mx
+            mi = mi_tmp if mi_tmp < mi else mi
+        for key in data_plot:
+            data_plot[key].plot(
+                ax=ax1,
+                x=list(data_plot[key].filter(regex='freq'))[0],
+                y=list(data_plot[key].filter(regex=item))[0],
             )
-            # plt.hold(True)
-        ax.set_xlabel('frequencies')
-        ax.legend(loc='upper right')
-        ax.grid('on')
-        self._additional_plot_instructions(ax, self.vib)
-        plt.xlim([-5, 100])
-        plt.ylim([-.005, 1.2 * mx])
+            data_plot[key].plot(
+                ax=ax2,
+                x=list(data_plot[key].filter(regex='freq'))[0],
+                y=list(data_plot[key].filter(regex=item))[0],
+                logy=True
+            )
+        for ax in ax1, ax2:
+            self._additional_plot_instructions(
+                ax,
+                {
+                    **self.freq_elec,
+                    **{key: val * self.freq_mech for key, val in self.fault_vib.items()},
+                },
+                label_text=True,
+            )
+            ax.legend(loc='upper right')
+            ax.grid('on')
+            ax.set_xlim([-5, x_limit])
+            ax.set_ylim([None, 1.2 * mx])
+        ax2.set_xlabel('frequencies')
         plt.show()
 
-    def _additional_plot_instructions(self, ax, *data):
+    def _additional_plot_instructions(self, ax, *data, label_text=False):
         """Plot related, manages additional plotting instructions."""
-        self._axvlines(
-            data[0],
-            ax=ax,
-            color='r',
-            linestyle='--',
-            lw=.5,
-            # label=label_text,
-        )
+        for key, value in data[0].items():
+            self._axvlines(
+                value,
+                ax=ax,
+                # color='r',
+                linestyle='--',
+                lw=.8,
+                label=key if label_text else None,
+            )
 
     def _axvlines(self, xs, ax=None, **plot_kwargs):
         """Plot related, creates vertical indicator lines."""
