@@ -96,6 +96,9 @@ class FaultAnalyzer:
         with open('data_fft.pickle', 'wb') as handle:
             pickle.dump(self.data_fft, handle)
 
+    def _determine_real_el_freq(self):
+        return
+
     def plot_all_faults(self, logy=True):
         data_plot = {}
         data = self.data_fft
@@ -131,7 +134,7 @@ class FaultAnalyzer:
                 ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
-    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, logy=False, ):
+    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, fault_vib_label=False):
         """Plotting selected phases of all assigned data sets into one graph.
 
         Parameters
@@ -142,8 +145,8 @@ class FaultAnalyzer:
             Data series (faults and/or healthy) to be displayed.
         x_limit: float
             Outer right limit for x axis.
-        logy: bool
-            Logarithmic display of y values. Deprecated.
+        fault_vib_label: bool
+            Display faulty vibration legend labels
         """
         fig, (ax1, ax2) = plt.subplots(2, 1)
         data_plot = {}
@@ -178,7 +181,7 @@ class FaultAnalyzer:
                     **self.freq_elec,
                     **{key: val * self.freq_mech for key, val in self.fault_vib.items()},
                 },
-                label_text=True,
+                label_text=fault_vib_label,
             )
             ax.legend(loc='upper right')
             ax.grid('on')
