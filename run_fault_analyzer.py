@@ -10,7 +10,7 @@ tmp = FaultAnalyzer(run_fft=False)
 tmp.plot_fault_in_one(
     item='ic',
     x_limit=100,
-    fault_vib_label=False,
+    fault_vib_label=True,
     # data_names=['h', 'f1'],
 )
 # tmp.plot_all_faults()
