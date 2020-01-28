@@ -18,8 +18,13 @@ class FaultAnalyzer:
         self.fault3 = pd.read_pickle('fault3.pickle')
         self.healthy = pd.read_pickle('data_healthy.pickle')
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
-        self.data_fft = {}
-        self.freq_elec = {'freq_r': 48.5}
+
+        # fft related
+        self.fft_data = {}
+
+        self.freq_el = {
+            key: 48.8 for key in self.def_data_names
+        }
         self.freq_mech = 1420/60
         self.fault_vib = {
             'inner': 5.4152,  # inner ring
@@ -66,42 +71,60 @@ class FaultAnalyzer:
         if run_fft:
             self.run_fft()
         else:
-            with open('data_fft.pickle', 'rb') as handle:
-                self.data_fft = pickle.load(handle)
+            with open('fft_data.pickle', 'rb') as handle:
+                self.fft_data, self.freq_el = pickle.load(handle)
 
     def run_fft(self):
+        """Run fft algorithm on data
+
+
+        """
         data = {
             'h': self.healthy.transpose().iloc[1:].to_numpy(),
             'f1': self.fault1.transpose().iloc[1:].to_numpy(),
             'f2': self.fault2.transpose().iloc[1:].to_numpy(),
             'f3': self.fault3.transpose().iloc[1:].to_numpy(),
         }
-        for item in self.def_data_names:
-            tmp = data[item]
+        for key in self.def_data_names:
+            tmp = data[key]
             tmp_fft = []
-            le = self.data_n[item]
+            le = self.data_n[key]
             for idx in range(3):
                 fft = sp.fft(tmp[idx]) / le
                 fft = abs(fft[range(int(le / 2))])
                 tmp_fft.append(fft[:])
-            self.data_fft[item] = pd.DataFrame({
-                'freq': np.fft.fftfreq(self.data_n[item], d=self.data_sp[item])[range(int(le / 2))],
+            self.fft_data[key] = pd.DataFrame({
+                'freq': np.fft.fftfreq(self.data_n[key], d=self.data_sp[key])[range(int(le / 2))],
                 'ia': tmp_fft[0],
                 'ib': tmp_fft[1],
                 'ic': tmp_fft[2],
             })
-            self.data_fft[item] = self.data_fft[item].loc[
-                (self.data_fft[item]['freq'] <= 500)
+            self.fft_data[key] = self.fft_data[key].loc[
+                (self.fft_data[key]['freq'] <= 500)
             ].reset_index(drop=True)
-        with open('data_fft.pickle', 'wb') as handle:
-            pickle.dump(self.data_fft, handle)
+        self._determine_real_el_freq()
+        with open('fft_data.pickle', 'wb') as handle:
+            pickle.dump((self.fft_data, self.freq_el), handle)
 
     def _determine_real_el_freq(self):
-        return
+        """
+
+        Calculate base frequency of data within given frequency range of rated electric frequency
+        """
+        tmp_freq_range = 5
+        tmp_freq = self.freq_el['h']
+        for key in self.fft_data:
+            tmp_data = self.fft_data[key].loc[
+                self.fft_data[key]['freq'].between(tmp_freq - tmp_freq_range, tmp_freq + tmp_freq_range)
+            ]
+            mx = tmp_data.filter(regex='i')[2:].idxmax()
+            self.freq_el[key] = tmp_data['freq'].loc[
+                int(np.mean(mx))
+            ]
 
     def plot_all_faults(self, logy=True):
         data_plot = {}
-        data = self.data_fft
+        data = self.fft_data
         mx = {}
         mi = {}
         fig = {}
@@ -150,7 +173,7 @@ class FaultAnalyzer:
         """
         fig, (ax1, ax2) = plt.subplots(2, 1)
         data_plot = {}
-        data = self.data_fft
+        data = self.fft_data
         mx = 0
         mi = 0
         for key in data_names:
@@ -178,8 +201,8 @@ class FaultAnalyzer:
             self._additional_plot_instructions(
                 ax,
                 {
-                    **self.freq_elec,
-                    **{key: val * self.freq_mech for key, val in self.fault_vib.items()},
+                    **self.freq_el,
+                    # **{key: val * self.freq_mech for key, val in self.fault_vib.items()},
                 },
                 label_text=fault_vib_label,
             )
@@ -211,5 +234,6 @@ class FaultAnalyzer:
                              repeats=len(xs), axis=0).flatten()
         plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
         return plot
+
 
 
