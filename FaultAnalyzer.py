@@ -19,8 +19,7 @@ class FaultAnalyzer:
         self.healthy = pd.read_pickle('data_healthy.pickle')
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
         self.data_fft = {}
-        self.data_fft_db = {}
-        self.freq_elec = {'freq_r': 48.8}
+        self.freq_elec = {'freq_r': 48.5}
         self.freq_mech = 1420/60
         self.fault_vib = {
             'inner': 5.4152,  # inner ring
@@ -59,11 +58,11 @@ class FaultAnalyzer:
             'f2': f2_sp,
             'f3': f3_sp,
         }
-        print('         sample time  | sample length \n' +
-              'healthy |   ' + str(h_sp) + '     |  ' + str(h_n) + '\n' +
-              'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
-              'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
-              'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
+        # print('         sample time  | sample length \n' +
+        #       'healthy |   ' + str(h_sp) + '     |  ' + str(h_n) + '\n' +
+        #       'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
+        #       'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
+        #       'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
         if run_fft:
             self.run_fft()
         else:
@@ -94,33 +93,42 @@ class FaultAnalyzer:
             self.data_fft[item] = self.data_fft[item].loc[
                 (self.data_fft[item]['freq'] <= 500)
             ].reset_index(drop=True)
-            # for key in self.data_fft:
-            #     self.data_fft_db[key] = self.data_fft[key].apply(lambda x: 20*np.log(x))
         with open('data_fft.pickle', 'wb') as handle:
             pickle.dump(self.data_fft, handle)
 
     def plot_all_faults(self, logy=True):
-        # plt.figure()
-        ax = {}
         data_plot = {}
+        data = self.data_fft
         mx = {}
-        for item in self.def_data_names:
-            plt.figure()
-            ax[item] = plt.axes()
-            data_plot[item] = self.data_fft[item]
-            mx[item] = self.data_fft[item].iloc[2:, 1:4].max().max()
-            data_plot[item].plot(
-                ax=ax[item],
-                x='freq',
-                y=['ia', 'ib', 'ic'],
-                title=str(item),
-                logy=logy
-            )
-            ax[item].set_xlabel('frequencies')
-            ax[item].legend()
-            ax[item].grid('on')
-            plt.xlim([-5, 150])
-            plt.ylim([-.005, 1.1 * mx[item]])
+        mi = {}
+        fig = {}
+        ax1 = {}
+        ax2 = {}
+        for key in self.def_data_names:
+            fig[key], (ax1[key], ax2[key]) = plt.subplots(2, 1)
+            data_plot[key] = data[key].copy()
+            mx[key] = data_plot[key].iloc[2:, 1:].max().max()
+            mi[key] = data_plot[key].min().min()
+            for item in data_plot[key].keys():
+                data_plot[key].plot(
+                    ax=ax1[key],
+                    x=list(data_plot[key].filter(regex='freq'))[0],
+                    y=list(data_plot[key].filter(regex='i')),
+                    title=str(key),
+                )
+                data_plot[key].plot(
+                    ax=ax2[key],
+                    x=list(data_plot[key].filter(regex='freq'))[0],
+                    y=list(data_plot[key].filter(regex='i')),
+                    logy=True
+                )
+            ax2[key].set_xlabel('frequencies')
+        for ax in ax1, ax2:
+            for key in ax.keys():
+                ax[key].legend('upper right'),
+                ax[key].grid('on')
+                ax[key].set_xlim([-5, 100])
+                ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
     def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, logy=False, ):
