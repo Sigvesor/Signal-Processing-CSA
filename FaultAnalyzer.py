@@ -77,7 +77,9 @@ class FaultAnalyzer:
     def run_fft(self):
         """Run fft algorithm on data
 
-
+        Optionally run when creating FaultAnalyzer.
+        Additionally calculating base frequency for each data series.
+        Rewriting 'fft_data.pickle'.
         """
         data = {
             'h': self.healthy.transpose().iloc[1:].to_numpy(),
@@ -122,7 +124,8 @@ class FaultAnalyzer:
                 int(np.mean(mx))
             ]
 
-    def plot_all_faults(self, logy=True):
+    def plot_all_faults(self):
+        """Plotting all available fft data in corresponding graph."""
         data_plot = {}
         data = self.fft_data
         mx = {}
@@ -135,30 +138,29 @@ class FaultAnalyzer:
             data_plot[key] = data[key].copy()
             mx[key] = data_plot[key].iloc[2:, 1:].max().max()
             mi[key] = data_plot[key].min().min()
-            for item in data_plot[key].keys():
-                data_plot[key].plot(
-                    ax=ax1[key],
-                    x=list(data_plot[key].filter(regex='freq'))[0],
-                    y=list(data_plot[key].filter(regex='i')),
-                    title=str(key),
-                )
-                data_plot[key].plot(
-                    ax=ax2[key],
-                    x=list(data_plot[key].filter(regex='freq'))[0],
-                    y=list(data_plot[key].filter(regex='i')),
-                    logy=True
-                )
+            data_plot[key].plot(
+                ax=ax1[key],
+                x=list(data_plot[key].filter(regex='freq'))[0],
+                y=list(data_plot[key].filter(regex='i')),
+                title=str(key),
+            )
+            data_plot[key].plot(
+                ax=ax2[key],
+                x=list(data_plot[key].filter(regex='freq'))[0],
+                y=list(data_plot[key].filter(regex='i')),
+                logy=True
+            )
             ax2[key].set_xlabel('frequencies')
         for ax in ax1, ax2:
             for key in ax.keys():
-                ax[key].legend('upper right'),
+                # ax[key].legend('upper right'),
                 ax[key].grid('on')
                 ax[key].set_xlim([-5, 100])
                 ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
     def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, fault_vib_label=False):
-        """Plotting selected phases of all assigned data sets into one graph.
+        """Plotting selected phases of all assigned fft data sets into one graph.
 
         Parameters
         ----------
