@@ -12,12 +12,18 @@ import pickle
 
 
 class FaultAnalyzer:
-    def __init__(self, run_fft=False):
+    def __init__(self, run_fft=False, fault_display=None):
         self.fault1 = pd.read_pickle('fault1.pickle')
         self.fault2 = pd.read_pickle('fault2.pickle')
         self.fault3 = pd.read_pickle('fault3.pickle')
         self.healthy = pd.read_pickle('data_healthy.pickle')
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
+        self.def_data_names_col = {
+            'h': 'b',
+            'f1': 'orange',
+            'f2': 'g',
+            'f3': 'r',
+        }
 
         # fft related
         self.fft_data = {}
@@ -73,7 +79,8 @@ class FaultAnalyzer:
         else:
             with open('fft_data.pickle', 'rb') as handle:
                 self.fft_data, self.freq_el = pickle.load(handle)
-        self.fault_freq = self.fault_freq_detection()
+        if fault_display:
+            self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
 
     def run_fft(self):
         """Run fft algorithm on data
@@ -125,26 +132,38 @@ class FaultAnalyzer:
                 int(np.mean(mx))
             ]
 
-    def fault_freq_detection(self):
-        fault_freq = {
-            'bearing': self._fault_bearing(),
-            'stf': [self.freq_el['h'] * k for k in range(1, 8)],
+    def fault_freq_detection(self, fault_display):
+        faults = {
+            'bearing': self._fault_bearing,
+            'stf': self._fault_stf,
         }
-        return fault_freq
+        fault_freq = {}
+        fault_freq_style = {}
+        tmp_style = ['-.', ':', '-.-', '--']
+        idx = 0
+        for fault in fault_display:
+            fault_freq[fault] = faults[fault]()
+            fault_freq_style[fault] = tmp_style[idx]
+            idx += 1
+        return fault_freq, fault_freq_style
 
-    # def _fault_outer_raceway(self):
-    #     """Outer raceway fault freq based on Chapter4/Slide20"""
-    #     return tmp
+    def _fault_stf(self):
+        """Outer raceway fault freq based on Chapter4/Slide20"""
+        tmp = {}
+        for key in self.def_data_names:
+            tmp[key] = [self.freq_el[key] * k for k in range(1, 8)]
+        return tmp
 
     def _fault_bearing(self):
         """Bearing Fault frequencies based on Chapter4/Slide20."""
         K = 0.4
         N_b = 9
         f_c = K * N_b * self.freq_mech
-        f_s = self.freq_el['h']
-        tmp = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
+        tmp = {}
+        for key in self.def_data_names:
+            f_s = self.freq_el[key]
+            tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
         return tmp
-
 
     def plot_all_faults(self):
         """Plotting all available fft data in corresponding graph."""
@@ -181,7 +200,12 @@ class FaultAnalyzer:
                 ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
-    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, fault_display=None, fault_vib_label=False):
+    def plot_fault_in_one(
+            self, item='ia',
+            data_names=('h', 'f1', 'f2', 'f3'),
+            x_limit=100,
+            fault_freq_display=False,
+    ):
         """Plotting selected phases of all assigned fft data sets into one graph.
 
         Parameters
@@ -192,8 +216,8 @@ class FaultAnalyzer:
             Data series (faults and/or healthy) to be displayed.
         x_limit: float
             Outer right limit for x axis.
-        fault_display = list of str
-            list of strings existing in 'self.fault_freq'
+        fault_freq_display: bool
+            Display fault frequencies from 'self.fault_freq'
         fault_vib_label: bool
             Display faulty vibration legend labels
         """
@@ -216,44 +240,48 @@ class FaultAnalyzer:
                 ax=ax1,
                 x=list(data_plot[key].filter(regex='freq'))[0],
                 y=list(data_plot[key].filter(regex=item))[0],
+                color=self.def_data_names_col[key],
             )
             data_plot[key].plot(
                 ax=ax2,
                 x=list(data_plot[key].filter(regex='freq'))[0],
                 y=list(data_plot[key].filter(regex=item))[0],
+                color=self.def_data_names_col[key],
                 logy=True
             )
         for ax in ax1, ax2:
-            self._additional_plot_instructions(
-                ax,
-                {
-                    **self.freq_el,
-                    # **{key: val * self.freq_mech for key, val in self.fault_vib.items()},
-                },
-                label_text=fault_vib_label,
-            )
+            for key in self.def_data_names:
+                self._additional_plot_instructions(
+                    ax,
+                    {key: self.freq_el[key]},
+                    custom_col=self.def_data_names_col[key]
+                )
             ax.grid('on')
             ax.set_xlim([-5, x_limit])
             ax.set_ylim([None, 1.2 * mx])
-            for item in fault_display:
-                self._additional_plot_instructions(
-                    ax,
-                    {item: self.fault_freq[item]},
-                    label_text=True,
-                )
+            if fault_freq_display:
+                for item in self.fault_freq.keys():
+                    for key, val in self.fault_freq[item].items():
+                        self._additional_plot_instructions(
+                            ax,
+                            {str(item + '_' + key): val},
+                            label_text=True,
+                            custom_col=self.def_data_names_col[key],
+                            custom_style=self.fault_freq_style[item],
+                        )
             ax.legend(loc='upper right')
         ax2.set_xlabel('frequencies')
         plt.show()
 
-    def _additional_plot_instructions(self, ax, *data, label_text=False):
+    def _additional_plot_instructions(self, ax, *data, label_text=False, custom_col=None, custom_style=None):
         """Plot related, manages additional plotting instructions."""
         for key, value in data[0].items():
             self._axvlines(
                 value,
                 ax=ax,
-                # color='r',
-                linestyle='--',
-                lw=.8,
+                color='k' if custom_col is None else custom_col,
+                linestyle='solid' if custom_style is None else custom_style,
+                lw=.5,
                 label=key if label_text else None,
             )
 
