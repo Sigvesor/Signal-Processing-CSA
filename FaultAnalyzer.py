@@ -73,6 +73,7 @@ class FaultAnalyzer:
         else:
             with open('fft_data.pickle', 'rb') as handle:
                 self.fft_data, self.freq_el = pickle.load(handle)
+        self.fault_freq = self.fault_freq_detection()
 
     def run_fft(self):
         """Run fft algorithm on data
@@ -124,6 +125,27 @@ class FaultAnalyzer:
                 int(np.mean(mx))
             ]
 
+    def fault_freq_detection(self):
+        fault_freq = {
+            'bearing': self._fault_bearing(),
+            'stf': [self.freq_el['h'] * k for k in range(1, 8)],
+        }
+        return fault_freq
+
+    # def _fault_outer_raceway(self):
+    #     """Outer raceway fault freq based on Chapter4/Slide20"""
+    #     return tmp
+
+    def _fault_bearing(self):
+        """Bearing Fault frequencies based on Chapter4/Slide20."""
+        K = 0.4
+        N_b = 9
+        f_c = K * N_b * self.freq_mech
+        f_s = self.freq_el['h']
+        tmp = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
+        return tmp
+
+
     def plot_all_faults(self):
         """Plotting all available fft data in corresponding graph."""
         data_plot = {}
@@ -159,7 +181,7 @@ class FaultAnalyzer:
                 ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
-    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, fault_vib_label=False):
+    def plot_fault_in_one(self, item='ia', data_names=('h', 'f1', 'f2', 'f3'), x_limit=100, fault_display=None, fault_vib_label=False):
         """Plotting selected phases of all assigned fft data sets into one graph.
 
         Parameters
@@ -170,6 +192,8 @@ class FaultAnalyzer:
             Data series (faults and/or healthy) to be displayed.
         x_limit: float
             Outer right limit for x axis.
+        fault_display = list of str
+            list of strings existing in 'self.fault_freq'
         fault_vib_label: bool
             Display faulty vibration legend labels
         """
@@ -208,10 +232,16 @@ class FaultAnalyzer:
                 },
                 label_text=fault_vib_label,
             )
-            ax.legend(loc='upper right')
             ax.grid('on')
             ax.set_xlim([-5, x_limit])
             ax.set_ylim([None, 1.2 * mx])
+            for item in fault_display:
+                self._additional_plot_instructions(
+                    ax,
+                    {item: self.fault_freq[item]},
+                    label_text=True,
+                )
+            ax.legend(loc='upper right')
         ax2.set_xlabel('frequencies')
         plt.show()
 
