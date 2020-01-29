@@ -7,16 +7,15 @@ Created on Mon Jan 22 13:34:43 2020
 from FaultAnalyzer import FaultAnalyzer
 
 fault_display = [
-    'bearing',
+    # 'bearing',
     'stf',
 ]
-
-tmp = FaultAnalyzer(run_fft=False)
+tmp = FaultAnalyzer(run_fft=False, fault_display=fault_display)
 tmp.plot_fault_in_one(
     item='ic',
     x_limit=100,
-    fault_display=fault_display,)
-    # fault_vib_label=True,)
-#     data_names=['h', 'f1'],
+    data_names=['h', 'f2', 'f3'],
+    fault_freq_display=True,
+)
 # )
 # tmp.plot_all_faults()
