@@ -17,5 +17,6 @@ tmp.plot_fault_in_one(
     data_names=['h', 'f2', 'f3'],
     fault_freq_display=True,
 )
-# )
-# tmp.plot_all_faults()
+tmp.plot_all_faults(
+    fault_freq_display=True,
+)
