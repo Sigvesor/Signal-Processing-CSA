@@ -165,8 +165,17 @@ class FaultAnalyzer:
             tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
         return tmp
 
-    def plot_all_faults(self):
-        """Plotting all available fft data in corresponding graph."""
+    def plot_all_faults(
+        self,
+        fault_freq_display=None,
+    ):
+        """Plotting all available fft data in corresponding graph.
+
+        Paramteters
+        -----------
+        fault_freq_display: bool
+            Display fault frequencies from 'self.fault_freq'
+        """
         data_plot = {}
         data = self.fft_data
         mx = {}
@@ -198,13 +207,16 @@ class FaultAnalyzer:
                 ax[key].grid('on')
                 ax[key].set_xlim([-5, 100])
                 ax[key].set_ylim([None, 1.2 * mx[key]])
+                if fault_freq_display:
+                    self._display_fault_freq(ax[key])
         plt.show()
 
     def plot_fault_in_one(
-            self, item='ia',
-            data_names=('h', 'f1', 'f2', 'f3'),
-            x_limit=100,
-            fault_freq_display=False,
+        self,
+        item='ia',
+        data_names=('h', 'f1', 'f2', 'f3'),
+        x_limit=100,
+        fault_freq_display=False,
     ):
         """Plotting selected phases of all assigned fft data sets into one graph.
 
@@ -218,8 +230,6 @@ class FaultAnalyzer:
             Outer right limit for x axis.
         fault_freq_display: bool
             Display fault frequencies from 'self.fault_freq'
-        fault_vib_label: bool
-            Display faulty vibration legend labels
         """
         fig, (ax1, ax2) = plt.subplots(2, 1)
         data_plot = {}
@@ -260,18 +270,21 @@ class FaultAnalyzer:
             ax.set_xlim([-5, x_limit])
             ax.set_ylim([None, 1.2 * mx])
             if fault_freq_display:
-                for item in self.fault_freq.keys():
-                    for key, val in self.fault_freq[item].items():
-                        self._additional_plot_instructions(
-                            ax,
-                            {str(item + '_' + key): val},
-                            label_text=True,
-                            custom_col=self.def_data_names_col[key],
-                            custom_style=self.fault_freq_style[item],
-                        )
+                self._display_fault_freq(ax)
             ax.legend(loc='upper right')
         ax2.set_xlabel('frequencies')
         plt.show()
+        
+    def _display_fault_freq(self, ax):
+        for item in self.fault_freq.keys():
+            for key, val in self.fault_freq[item].items():
+                self._additional_plot_instructions(
+                    ax,
+                    {str(item + '_' + key): val},
+                    label_text=True,
+                    custom_col=self.def_data_names_col[key],
+                    custom_style=self.fault_freq_style[item],
+                )
 
     def _additional_plot_instructions(self, ax, *data, label_text=False, custom_col=None, custom_style=None):
         """Plot related, manages additional plotting instructions."""
