@@ -17,6 +17,12 @@ class FaultAnalyzer:
         self.fault2 = pd.read_pickle('fault2.pickle')
         self.fault3 = pd.read_pickle('fault3.pickle')
         self.healthy = pd.read_pickle('data_healthy.pickle')
+        self.data = {
+            'h': self.healthy,
+            'f1': self.fault1,
+            'f2': self.fault2,
+            'f3': self.fault3,
+        }
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
         self.def_data_names_col = {
             'h': 'b',
@@ -38,7 +44,6 @@ class FaultAnalyzer:
             'cage': 0.39828,  # cage train
             'roll': 4.7135,  # rolling element
         }
-
 
         h_time = self.healthy['t']
         f1_time = self.fault1['t']
@@ -76,9 +81,11 @@ class FaultAnalyzer:
         #       'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
         #       'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
         self.upper_freq_lim = upper_freq_lim
+        self.park_data = None
         self._prep_data(run_fft, fault_display)
 
     def _prep_data(self, run_fft, fault_display):
+        """Prepare data."""
         if run_fft:
             self.run_fft()
         else:
@@ -90,6 +97,30 @@ class FaultAnalyzer:
             self.fft_data[key] = self.fft_data[key].loc[
                 (self.fft_data[key]['freq'] <= self.upper_freq_lim)
             ].reset_index(drop=True)
+        with open('park_data.pickle', 'rb') as handle:
+            self.park_data = pickle.load(handle)
+
+    def extended_park_ip(self):
+        park_data = {}
+        for key in self.def_data_names:
+            data = self.data[key]
+            park_data[key] = self._park_transformation(data)
+        with open('park_data.pickle', 'wb') as handle:
+            pickle.dump(park_data, handle)
+
+    def _park_transformation(self, data):
+        i_q = []
+        i_d = []
+        i_p = []
+        for idx in range(0, len(data['ia'])-1):
+            i_d.append(np.sqrt(2/3) * data['ia'][idx] - np.sqrt(1/6) * data['ib'][idx] - np.sqrt(1/6) * data['ic'][idx])
+            i_q.append(np.sqrt(1/2) * data['ib'][idx] - np.sqrt(1/1) * data['ic'][idx])
+            i_p.append(np.sqrt(np.power(i_d[idx], 2) + np.power(i_q[idx], 2)))
+        return {
+            'id': i_d,
+            'iq': i_q,
+            'i_p': i_p,
+        }
 
     def run_fft(self):
         """Run fft algorithm on data
@@ -188,6 +219,7 @@ class FaultAnalyzer:
     def plot_all_faults(
         self,
         fault_freq_display=None,
+        x_limit=100,
     ):
         """Plotting all available fft data in corresponding graph.
 
@@ -225,7 +257,7 @@ class FaultAnalyzer:
             for key in ax.keys():
                 # ax[key].legend('upper right'),
                 ax[key].grid('on')
-                ax[key].set_xlim([-5, 100])
+                ax[key].set_xlim([-5, x_limit])
                 ax[key].set_ylim([None, 1.2 * mx[key]])
                 if fault_freq_display:
                     self._display_fault_freq(ax[key])
