@@ -12,7 +12,7 @@ import pickle
 
 
 class FaultAnalyzer:
-    def __init__(self, run_fft=False, fault_display=None):
+    def __init__(self, run_fft=False, fault_display=None, upper_freq_lim=500):
         self.fault1 = pd.read_pickle('fault1.pickle')
         self.fault2 = pd.read_pickle('fault2.pickle')
         self.fault3 = pd.read_pickle('fault3.pickle')
@@ -38,6 +38,7 @@ class FaultAnalyzer:
             'cage': 0.39828,  # cage train
             'roll': 4.7135,  # rolling element
         }
+
 
         h_time = self.healthy['t']
         f1_time = self.fault1['t']
@@ -74,6 +75,10 @@ class FaultAnalyzer:
         #       'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
         #       'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
         #       'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
+        self.upper_freq_lim = upper_freq_lim
+        self._prep_data(run_fft, fault_display)
+
+    def _prep_data(self, run_fft, fault_display):
         if run_fft:
             self.run_fft()
         else:
@@ -81,6 +86,10 @@ class FaultAnalyzer:
                 self.fft_data, self.freq_el = pickle.load(handle)
         if fault_display:
             self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
+        for key in self.def_data_names:
+            self.fft_data[key] = self.fft_data[key].loc[
+                (self.fft_data[key]['freq'] <= self.upper_freq_lim)
+            ].reset_index(drop=True)
 
     def run_fft(self):
         """Run fft algorithm on data
@@ -109,9 +118,6 @@ class FaultAnalyzer:
                 'ib': tmp_fft[1],
                 'ic': tmp_fft[2],
             })
-            self.fft_data[key] = self.fft_data[key].loc[
-                (self.fft_data[key]['freq'] <= 500)
-            ].reset_index(drop=True)
         self._determine_real_el_freq()
         with open('fft_data.pickle', 'wb') as handle:
             pickle.dump((self.fft_data, self.freq_el), handle)
@@ -151,7 +157,14 @@ class FaultAnalyzer:
         """Outer raceway fault freq based on Chapter4/Slide20"""
         tmp = {}
         for key in self.def_data_names:
-            tmp[key] = [self.freq_el[key] * k for k in range(1, 8)]
+            i = 1
+            val = 0
+            tmp[key] = []
+            while val < self.upper_freq_lim:
+                val = self.freq_el[key] * i
+                tmp[key].append(val)
+                i += 1
+            # tmp[key] = [self.freq_el[key] * k for k in range(1, 8)]
         return tmp
 
     def _fault_bearing(self):
@@ -162,7 +175,14 @@ class FaultAnalyzer:
         tmp = {}
         for key in self.def_data_names:
             f_s = self.freq_el[key]
-            tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
+            i = 1
+            val = 0
+            tmp[key] = []
+            while val < self.upper_freq_lim:
+                val = f_s + pow(-1, i) * int((i+1)/2) * f_c
+                tmp[key].append(val)
+                i += 1
+                # tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
         return tmp
 
     def plot_all_faults(
@@ -171,8 +191,8 @@ class FaultAnalyzer:
     ):
         """Plotting all available fft data in corresponding graph.
 
-        Paramteters
-        -----------
+        Parameters
+        ----------
         fault_freq_display: bool
             Display fault frequencies from 'self.fault_freq'
         """
@@ -237,9 +257,13 @@ class FaultAnalyzer:
         mx = 0
         mi = 0
         for key in data_names:
+            # data_plot[key] = pd.DataFrame({
+            #     str('freq_' + key): data[key]['freq'].loc[(data[key]['freq'] <= 500)],
+            #     str(key + '_' + item): data[key][item].loc[(data[key]['freq'] <= 500)],
+            # })
             data_plot[key] = pd.DataFrame({
-                str('freq_' + key): data[key]['freq'].loc[(data[key]['freq'] <= 500)],
-                str(key + '_' + item): data[key][item].loc[(data[key]['freq'] <= 500)],
+                str('freq_' + key): data[key]['freq'],
+                str(key + '_' + item): data[key][item],
             })
             mx_tmp = data[key][item][2:].max()
             mi_tmp = data[key][item].min()
