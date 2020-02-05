@@ -9,118 +9,120 @@ import scipy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+import time
 
 
 class FaultAnalyzer:
-    def __init__(self, run_fft=False, fault_display=None, upper_freq_lim=500):
-        self.fault1 = pd.read_pickle('fault1.pickle')
-        self.fault2 = pd.read_pickle('fault2.pickle')
-        self.fault3 = pd.read_pickle('fault3.pickle')
-        self.healthy = pd.read_pickle('data_healthy.pickle')
+    def __init__(
+            self,
+            run_park_tr=False,
+            run_fft=False,
+            fault_display=None,
+            upper_freq_lim=500
+    ):
         self.data = {
-            'h': self.healthy,
-            'f1': self.fault1,
-            'f2': self.fault2,
-            'f3': self.fault3,
+            'h': pd.read_pickle('data_healthy.pickle'),
+            'f1': pd.read_pickle('fault1.pickle'),
+            'f2': pd.read_pickle('fault2.pickle'),
+            'f3': pd.read_pickle('fault3.pickle'),
         }
+        self.numpy_data = {}
+        for key in self.data.keys():
+            self.numpy_data[key] = self.data[key].transpose().iloc[1:].to_numpy()
+
+        # initial assignments
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
+        self.freq_el = {
+            key: 48.8 for key in self.def_data_names
+        }
+        self.freq_mech = 1420/60
         self.def_data_names_col = {
             'h': 'b',
             'f1': 'orange',
             'f2': 'g',
             'f3': 'r',
         }
-
-        # fft related
+        self.upper_freq_lim = upper_freq_lim
+        self.time = {}      # time DataFrames
+        for key in self.def_data_names:
+            self.time[key] = self.data[key]['t']
+        self.data_len = {}  # data lengths
+        for key in self.def_data_names:
+            self.data_len[key] = self.time[key].count()
+        self.data_sp = {}   # data sample times
+        for key in self.def_data_names:
+            self.data_sp[key] = self.time[key][1]
+        self.park_data = {}
+        self.numpy_park_data = {}
         self.fft_data = {}
-
-        self.freq_el = {
-            key: 48.8 for key in self.def_data_names
-        }
-        self.freq_mech = 1420/60
-        self.fault_vib = {
-            'inner': 5.4152,  # inner ring
-            'outer': 3.5848,  # outer ring
-            'cage': 0.39828,  # cage train
-            'roll': 4.7135,  # rolling element
-        }
-
-        h_time = self.healthy['t']
-        f1_time = self.fault1['t']
-        f2_time = self.fault2['t']
-        f3_time = self.fault3['t']
-        self.time = {
-            'h': h_time,
-            'f1': f1_time,
-            'f2': f2_time,
-            'f3': f3_time,
-        }
-        h_n = h_time.count()
-        f1_n = f1_time.count()
-        f2_n = f2_time.count()
-        f3_n = f3_time.count()
-        self.data_n = {
-            'h': h_n,
-            'f1': f1_n,
-            'f2': f2_n,
-            'f3': f3_n,
-        }
-        h_sp = h_time[1]
-        f1_sp = f1_time[1]
-        f2_sp = f2_time[1]
-        f3_sp = f3_time[1]
-        self.data_sp = {
-            'h': h_sp,
-            'f1': f1_sp,
-            'f2': f2_sp,
-            'f3': f3_sp,
-        }
+        self._process_input(run_park_tr, run_fft, fault_display)
         # print('         sample time  | sample length \n' +
         #       'healthy |   ' + str(h_sp) + '     |  ' + str(h_n) + '\n' +
         #       'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
         #       'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
         #       'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
-        self.upper_freq_lim = upper_freq_lim
-        self.park_data = None
-        self._prep_data(run_fft, fault_display)
 
-    def _prep_data(self, run_fft, fault_display):
-        """Prepare data."""
+    def _process_input(self, run_park_tr, run_fft, fault_display):
+        """Process data if needed."""
+        if run_park_tr:
+            park_data = self._extended_park_transformation()
+            for key in self.def_data_names:
+                self.park_data[key] = pd.DataFrame(park_data[key])
+                self.park_data[key].to_pickle(str('park_' + key + '.pickle'))
+                self.numpy_park_data[key] = self.park_data[key].transpose().to_numpy()
+        elif run_fft:
+            # with open('park_data.pickle', 'rb') as handle:
+            #     self.park_data = pickle.load(handle)
+            for key in self.def_data_names:
+                self.park_data[key] = pd.read_pickle(str('park_' + key + '.pickle'))
+                self.numpy_park_data[key] = self.park_data[key].transpose().to_numpy()
         if run_fft:
-            self.run_fft()
+            fft_data = self.run_fft()
+            for key in self.def_data_names:
+                self.fft_data[key] = pd.DataFrame(fft_data[key])
+                self.fft_data[key].to_pickle(str('fft_' + key + '.pickle'))
         else:
-            with open('fft_data.pickle', 'rb') as handle:
-                self.fft_data, self.freq_el = pickle.load(handle)
-        if fault_display:
-            self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
+            # with open('fft_data.pickle', 'rb') as handle:
+            #     self.fft_data, self.freq_el = pickle.load(handle)
+            for key in self.def_data_names:
+                self.fft_data[key] = pd.read_pickle(str('fft_' + key + '.pickle'))
         for key in self.def_data_names:
             self.fft_data[key] = self.fft_data[key].loc[
                 (self.fft_data[key]['freq'] <= self.upper_freq_lim)
             ].reset_index(drop=True)
-        with open('park_data.pickle', 'rb') as handle:
-            self.park_data = pickle.load(handle)
+        self._determine_real_el_freq()
+        if fault_display:
+            self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
 
-    def extended_park_ip(self):
+    def _extended_park_transformation(self):
+        data = self.numpy_data
         park_data = {}
+        start = time.time()
         for key in self.def_data_names:
-            data = self.data[key]
-            park_data[key] = self._park_transformation(data)
-        with open('park_data.pickle', 'wb') as handle:
-            pickle.dump(park_data, handle)
+            key_time = time.time() - start
+            print(key_time)
+            park_data[key] = self._park_transformation(data[key])
+        return park_data
 
     def _park_transformation(self, data):
-        i_q = []
-        i_d = []
-        i_p = []
-        for idx in range(0, len(data['ia'])-1):
-            i_d.append(np.sqrt(2/3) * data['ia'][idx] - np.sqrt(1/6) * data['ib'][idx] - np.sqrt(1/6) * data['ic'][idx])
-            i_q.append(np.sqrt(1/2) * data['ib'][idx] - np.sqrt(1/1) * data['ic'][idx])
-            i_p.append(np.sqrt(np.power(i_d[idx], 2) + np.power(i_q[idx], 2)))
-        return {
+        print('ok')
+        start = time.time()
+        i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
+        id_time = time.time() - start
+        print(id_time)
+        i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/1) * data[2]
+        iq_time = time.time() - start
+        print(iq_time)
+        i_p = np.sqrt(i_d**2 + i_q**2)
+        ip_time = time.time() - start
+        print(ip_time)
+        print('---')
+        park_data = {
             'id': i_d,
             'iq': i_q,
-            'i_p': i_p,
+            'ip': i_p,
         }
+        return park_data
 
     def run_fft(self):
         """Run fft algorithm on data
@@ -129,29 +131,21 @@ class FaultAnalyzer:
         Additionally calculating base frequency for each data series.
         Rewriting 'fft_data.pickle'.
         """
-        data = {
-            'h': self.healthy.transpose().iloc[1:].to_numpy(),
-            'f1': self.fault1.transpose().iloc[1:].to_numpy(),
-            'f2': self.fault2.transpose().iloc[1:].to_numpy(),
-            'f3': self.fault3.transpose().iloc[1:].to_numpy(),
-        }
+        data = self.numpy_park_data
+        fft_data = {}
         for key in self.def_data_names:
             tmp = data[key]
             tmp_fft = []
-            le = self.data_n[key]
+            le = self.data_len[key]
+            fft_data[key] = {}
             for idx in range(3):
                 fft = sp.fft(tmp[idx]) / le
                 fft = abs(fft[range(int(le / 2))])
                 tmp_fft.append(fft[:])
-            self.fft_data[key] = pd.DataFrame({
-                'freq': np.fft.fftfreq(self.data_n[key], d=self.data_sp[key])[range(int(le / 2))],
-                'ia': tmp_fft[0],
-                'ib': tmp_fft[1],
-                'ic': tmp_fft[2],
-            })
-        self._determine_real_el_freq()
-        with open('fft_data.pickle', 'wb') as handle:
-            pickle.dump((self.fft_data, self.freq_el), handle)
+                key2 = list(self.park_data[key].keys())
+                fft_data[key][key2[idx]] = tmp_fft[idx]
+            fft_data[key]['freq'] = np.fft.fftfreq(self.data_len[key], d=self.data_sp[key])[range(int(le / 2))]
+        return fft_data
 
     def _determine_real_el_freq(self):
         """
@@ -261,6 +255,40 @@ class FaultAnalyzer:
                 ax[key].set_ylim([None, 1.2 * mx[key]])
                 if fault_freq_display:
                     self._display_fault_freq(ax[key])
+        plt.show()
+
+    def plot_raw_data(self, data_names=None):
+        data_plot = {}
+        data = self.data
+        mx = {}
+        mi = {}
+        fig = {}
+        ax1 = {}
+        ax2 = {}
+        for key in data_names:
+            fig[key], (ax1[key], ax2[key]) = plt.subplots(2, 1)
+            data_plot[key] = data[key].copy()
+            mx[key] = data_plot[key].iloc[2:, 1:].max().max()
+            mi[key] = data_plot[key].min().min()
+            data_plot[key].plot(
+                ax=ax1[key],
+                x=list(data_plot[key].filter(regex='t'))[0],
+                y=list(data_plot[key].filter(regex='i')),
+                title=str(key),
+            )
+            data_plot[key].plot(
+                ax=ax2[key],
+                x=list(data_plot[key].filter(regex='t'))[0],
+                y=list(data_plot[key].filter(regex='i')),
+                logy=True
+            )
+            ax2[key].set_xlabel('frequencies')
+        for ax in ax1, ax2:
+            for key in ax.keys():
+                # ax[key].legend('upper right'),
+                ax[key].grid('on')
+                # ax[key].set_xlim([-5, x_limit])
+                # ax[key].set_ylim([None, 1.2 * mx[key]])
         plt.show()
 
     def plot_fault_in_one(
