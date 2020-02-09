@@ -93,7 +93,7 @@ class FaultAnalyzer:
             ].reset_index(drop=True)
         self._find_fundamental_el_freq(self.freq_h1['h'])
         if fault_display:
-            self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
+            self.fault_freq, self.fault_freq_style = self._fault_freq_detection(fault_display)
         self.magn_faults = {}
         self.freq_faults = {}
         self._find_significant_fault_val(fault_display)
@@ -138,6 +138,7 @@ class FaultAnalyzer:
         return fft_data
 
     def _find_fundamental_el_freq(self, start_freq):
+        """Computing fundamental frequencies from data."""
         range_freq = 5
         for key in self.fft_data:
             mx, freq = self._find_peak_freq(
@@ -172,7 +173,8 @@ class FaultAnalyzer:
         # ]
         return mx, freq
 
-    def fault_freq_detection(self, fault_display):
+    def _fault_freq_detection(self, fault_display):
+        """"""
         faults = {
             'bearing': self._fault_bearing,
             'stf': self._fault_stf,
@@ -219,33 +221,14 @@ class FaultAnalyzer:
                 # tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
         return tmp
 
-    def _find_significant_fault_freq(self, fault_display):
-        range_freq = 3
-        magn_fault = {}
-        freq_fault = {}
-        ip_magn = {}
-        id_magn = {}
-        iq_magn = {}
-        for f in fault_display:
-            magn_fault[f] = {}
-            freq_fault[f] = {}
-            ip_magn[f] = {}
-            id_magn[f] = {}
-            iq_magn[f] = {}
-            faults = self.fault_freq[f]
-            for key in self.def_data_names:
-                magn_tmp = {}
-                freq_tmp = {}
-                for item in faults[key]:
-                    mx, freq = self._find_peak_freq(item, range_freq, self.fft_data[key])
-                    magn_tmp[item] = mx
-                    freq_tmp[item] = freq
-                    # if self.fft_data[key]
-                magn_fault[f][key] = pd.DataFrame(magn_tmp)
-                freq_fault[f][key] = pd.DataFrame(freq_tmp)
-                # ip_magn[f][key] =
-
     def _find_significant_fault_val(self, fault_display):
+        """Compute magnitudes around calculated fault frequencies.
+
+        Parameters
+        ----------
+        fault_display: list of str
+               Names of faults to display
+        """
         range_freq = 3
         magn_fault = {}
         freq_fault = {}
@@ -263,8 +246,6 @@ class FaultAnalyzer:
                         mx, freq = self._find_peak_freq(tmp, range_freq, self.fft_data[key])
                         magn_fault[f][item][key].append(mx[item])
                         freq_fault[f][item][key].append(freq[item])
-                # self.magn_faults[f][item] = pd.DataFrame(magn_fault[f][item])
-                # self.freq_faults[f][item] = pd.DataFrame(freq_fault[f][item])
         self.magn_faults = magn_fault
         self.freq_faults = freq_fault
 
@@ -318,6 +299,7 @@ class FaultAnalyzer:
         plt.show()
 
     def plot_raw_data(self, data_names=None):
+        """Plotting raw data."""
         data_plot = {}
         data = self.data
         mx = {}
@@ -420,10 +402,10 @@ class FaultAnalyzer:
         plt.show()
 
     def plot_faults_comparison(self):
+        """Plotting magnitudes of fault frequencies."""
         for f in self.freq_faults.keys():
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
             magn = self.magn_faults[f]
-            freq = self.freq_faults[f]
             data = {}
             axes = {
                 'id': ax1,
@@ -431,25 +413,12 @@ class FaultAnalyzer:
                 'ip': ax3,
             }
             for item in magn.keys():
-                # data[item] = pd.DataFrame({
-                #     **magn[item],
-                #     **{str('freq_' + key): val for key, val in freq[item].items()},
-                # })
                 data[item] = pd.DataFrame(
                     magn[item],
                     index=[str('h' + str(x)) for x in range(1, len(magn[item]['h']) + 1)],
                 )
             for item in data.keys():
                 ax = axes[item]
-                # for key in self.def_data_names:
-                #     data[item][key].plot.bar(
-                #         ax=ax,
-                #         x=list(data[item].filter(regex=str('freq_' + key)))[0],
-                #         y=list(data[item][key])[0],
-                #         color=self.def_data_names_col[key],
-                #         # kind='hist',
-                #         rot=0,
-                #     )
                 plot_data = data[item].copy()
                 plot_data.plot(
                     ax=ax,
