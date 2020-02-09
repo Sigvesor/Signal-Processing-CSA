@@ -8,8 +8,6 @@ import pandas as pd
 import scipy as sp
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
-import time
 
 
 class FaultAnalyzer:
@@ -101,9 +99,7 @@ class FaultAnalyzer:
     def _run_extended_park_transformation(self):
         data = self.numpy_data
         park_data = {}
-        start = time.time()
         for key in self.def_data_names:
-            key_time = time.time() - start
             i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
             i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/1) * data[2]
             i_p = np.sqrt(i_d**2 + i_q**2)
@@ -174,7 +170,13 @@ class FaultAnalyzer:
         return mx, freq
 
     def _fault_freq_detection(self, fault_display):
-        """"""
+        """Evaluate fault frequencies.
+
+        Parameters
+        ----------
+        fault_display: list of str
+               Names of faults to display
+        """
         faults = {
             'bearing': self._fault_bearing,
             'stf': self._fault_stf,
