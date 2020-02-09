@@ -32,9 +32,10 @@ class FaultAnalyzer:
 
         # initial assignments
         self.def_data_names = ['h', 'f1', 'f2', 'f3']
-        self.freq_el = {
+        self.freq_h1 = {
             key: 48.8 for key in self.def_data_names
         }
+        self.magn_h1 = {}
         self.freq_mech = 1420/60
         self.def_data_names_col = {
             'h': 'b',
@@ -65,7 +66,7 @@ class FaultAnalyzer:
     def _process_input(self, run_park_tr, run_fft, fault_display):
         """Process data if needed."""
         if run_park_tr:
-            park_data = self._extended_park_transformation()
+            park_data = self._run_extended_park_transformation()
             for key in self.def_data_names:
                 self.park_data[key] = pd.DataFrame(park_data[key])
                 self.park_data[key].to_pickle(str('park_' + key + '.pickle'))
@@ -77,54 +78,43 @@ class FaultAnalyzer:
                 self.park_data[key] = pd.read_pickle(str('park_' + key + '.pickle'))
                 self.numpy_park_data[key] = self.park_data[key].transpose().to_numpy()
         if run_fft:
-            fft_data = self.run_fft()
+            fft_data = self._run_fft()
             for key in self.def_data_names:
                 self.fft_data[key] = pd.DataFrame(fft_data[key])
                 self.fft_data[key].to_pickle(str('fft_' + key + '.pickle'))
         else:
             # with open('fft_data.pickle', 'rb') as handle:
-            #     self.fft_data, self.freq_el = pickle.load(handle)
+            #     self.fft_data, self.freq_h1 = pickle.load(handle)
             for key in self.def_data_names:
                 self.fft_data[key] = pd.read_pickle(str('fft_' + key + '.pickle'))
         for key in self.def_data_names:
             self.fft_data[key] = self.fft_data[key].loc[
                 (self.fft_data[key]['freq'] <= self.upper_freq_lim)
             ].reset_index(drop=True)
-        self._determine_real_el_freq()
+        self._find_fundamental_el_freq(self.freq_h1['h'])
         if fault_display:
             self.fault_freq, self.fault_freq_style = self.fault_freq_detection(fault_display)
+        self.magn_faults = {}
+        self.freq_faults = {}
+        self._find_significant_fault_val(fault_display)
 
-    def _extended_park_transformation(self):
+    def _run_extended_park_transformation(self):
         data = self.numpy_data
         park_data = {}
         start = time.time()
         for key in self.def_data_names:
             key_time = time.time() - start
-            print(key_time)
-            park_data[key] = self._park_transformation(data[key])
+            i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
+            i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/1) * data[2]
+            i_p = np.sqrt(i_d**2 + i_q**2)
+            park_data[key] = {
+                'id': i_d,
+                'iq': i_q,
+                'ip': i_p,
+            }
         return park_data
 
-    def _park_transformation(self, data):
-        print('ok')
-        start = time.time()
-        i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
-        id_time = time.time() - start
-        print(id_time)
-        i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/1) * data[2]
-        iq_time = time.time() - start
-        print(iq_time)
-        i_p = np.sqrt(i_d**2 + i_q**2)
-        ip_time = time.time() - start
-        print(ip_time)
-        print('---')
-        park_data = {
-            'id': i_d,
-            'iq': i_q,
-            'ip': i_p,
-        }
-        return park_data
-
-    def run_fft(self):
+    def _run_fft(self):
         """Run fft algorithm on data
 
         Optionally run when creating FaultAnalyzer.
@@ -147,21 +137,40 @@ class FaultAnalyzer:
             fft_data[key]['freq'] = np.fft.fftfreq(self.data_len[key], d=self.data_sp[key])[range(int(le / 2))]
         return fft_data
 
-    def _determine_real_el_freq(self):
-        """
+    def _find_fundamental_el_freq(self, start_freq):
+        range_freq = 5
+        for key in self.fft_data:
+            mx, freq = self._find_peak_freq(
+                start_freq,
+                range_freq,
+                self.fft_data[key],
+            )
+            self.freq_h1[key] = int(np.mean(list(freq.values())))
+            self.magn_h1[key] = mx
 
+    def _find_peak_freq(self, start_freq, range_freq, data):
+        """
         Calculate base frequency of data within given frequency range of rated electric frequency
         """
-        tmp_freq_range = 5
-        tmp_freq = self.freq_el['h']
-        for key in self.fft_data:
-            tmp_data = self.fft_data[key].loc[
-                self.fft_data[key]['freq'].between(tmp_freq - tmp_freq_range, tmp_freq + tmp_freq_range)
-            ]
-            mx = tmp_data.filter(regex='i')[2:].idxmax()
-            self.freq_el[key] = tmp_data['freq'].loc[
-                int(np.mean(mx))
-            ]
+        tmp_data = data.loc[
+            data['freq'].between(start_freq - range_freq, start_freq + range_freq)
+        ]
+        tmp = tmp_data.filter(regex='i')[2:].idxmax()
+        mx = {
+            'id': tmp_data['id'][tmp[0]],
+            'iq': tmp_data['iq'][tmp[1]],
+            'ip': tmp_data['ip'][tmp[2]],
+        }
+        tmp = [tmp_data['freq'].loc[item] for item in tmp]
+        freq = {
+            'id': tmp[0],
+            'iq': tmp[1],
+            'ip': tmp[2],
+        }
+        # freq = tmp_data['freq'].loc[
+        #     int(np.mean(mx))
+        # ]
+        return mx, freq
 
     def fault_freq_detection(self, fault_display):
         faults = {
@@ -179,17 +188,17 @@ class FaultAnalyzer:
         return fault_freq, fault_freq_style
 
     def _fault_stf(self):
-        """Outer raceway fault freq based on Chapter4/Slide20"""
+        """Short turn fault freq based on Chapter4/Slide20"""
         tmp = {}
         for key in self.def_data_names:
             i = 1
             val = 0
             tmp[key] = []
             while val < self.upper_freq_lim:
-                val = self.freq_el[key] * i
+                val = self.freq_h1[key] * i
                 tmp[key].append(val)
                 i += 1
-            # tmp[key] = [self.freq_el[key] * k for k in range(1, 8)]
+            # tmp[key] = [self.freq_h1[key] * k for k in range(1, 8)]
         return tmp
 
     def _fault_bearing(self):
@@ -199,7 +208,7 @@ class FaultAnalyzer:
         f_c = K * N_b * self.freq_mech
         tmp = {}
         for key in self.def_data_names:
-            f_s = self.freq_el[key]
+            f_s = self.freq_h1[key]
             i = 1
             val = 0
             tmp[key] = []
@@ -209,6 +218,55 @@ class FaultAnalyzer:
                 i += 1
                 # tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
         return tmp
+
+    def _find_significant_fault_freq(self, fault_display):
+        range_freq = 3
+        magn_fault = {}
+        freq_fault = {}
+        ip_magn = {}
+        id_magn = {}
+        iq_magn = {}
+        for f in fault_display:
+            magn_fault[f] = {}
+            freq_fault[f] = {}
+            ip_magn[f] = {}
+            id_magn[f] = {}
+            iq_magn[f] = {}
+            faults = self.fault_freq[f]
+            for key in self.def_data_names:
+                magn_tmp = {}
+                freq_tmp = {}
+                for item in faults[key]:
+                    mx, freq = self._find_peak_freq(item, range_freq, self.fft_data[key])
+                    magn_tmp[item] = mx
+                    freq_tmp[item] = freq
+                    # if self.fft_data[key]
+                magn_fault[f][key] = pd.DataFrame(magn_tmp)
+                freq_fault[f][key] = pd.DataFrame(freq_tmp)
+                # ip_magn[f][key] =
+
+    def _find_significant_fault_val(self, fault_display):
+        range_freq = 3
+        magn_fault = {}
+        freq_fault = {}
+        for f in fault_display:
+            faults = self.fault_freq[f]
+            magn_fault[f] = {}
+            freq_fault[f] = {}
+            for item in ['id', 'iq', 'ip']:
+                magn_fault[f][item] = {}
+                freq_fault[f][item] = {}
+                for key in self.def_data_names:
+                    magn_fault[f][item][key] = []
+                    freq_fault[f][item][key] = []
+                    for tmp in faults[key][:-1]:
+                        mx, freq = self._find_peak_freq(tmp, range_freq, self.fft_data[key])
+                        magn_fault[f][item][key].append(mx[item])
+                        freq_fault[f][item][key].append(freq[item])
+                # self.magn_faults[f][item] = pd.DataFrame(magn_fault[f][item])
+                # self.freq_faults[f][item] = pd.DataFrame(freq_fault[f][item])
+        self.magn_faults = magn_fault
+        self.freq_faults = freq_fault
 
     def plot_all_faults(
         self,
@@ -221,6 +279,8 @@ class FaultAnalyzer:
         ----------
         fault_freq_display: bool
             Display fault frequencies from 'self.fault_freq'
+        x_limit: float
+            Outer right limit for x axis.
         """
         data_plot = {}
         data = self.fft_data
@@ -347,24 +407,67 @@ class FaultAnalyzer:
             for key in self.def_data_names:
                 self._additional_plot_instructions(
                     ax,
-                    {key: self.freq_el[key]},
+                    {key: self.freq_h1[key]},
                     custom_col=self.def_data_names_col[key]
                 )
             ax.grid('on')
             ax.set_xlim([-5, x_limit])
             ax.set_ylim([None, 1.2 * mx])
             if fault_freq_display:
-                self._display_fault_freq(ax)
+                self._display_fault_freq(ax, data_names)
             ax.legend(loc='upper right')
         ax2.set_xlabel('frequencies')
         plt.show()
-        
-    def _display_fault_freq(self, ax):
+
+    def plot_faults_comparison(self):
+        for f in self.freq_faults.keys():
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+            magn = self.magn_faults[f]
+            freq = self.freq_faults[f]
+            data = {}
+            axes = {
+                'id': ax1,
+                'iq': ax2,
+                'ip': ax3,
+            }
+            for item in magn.keys():
+                # data[item] = pd.DataFrame({
+                #     **magn[item],
+                #     **{str('freq_' + key): val for key, val in freq[item].items()},
+                # })
+                data[item] = pd.DataFrame(
+                    magn[item],
+                    index=[str('h' + str(x)) for x in range(1, len(magn[item]['h']) + 1)],
+                )
+            for item in data.keys():
+                ax = axes[item]
+                # for key in self.def_data_names:
+                #     data[item][key].plot.bar(
+                #         ax=ax,
+                #         x=list(data[item].filter(regex=str('freq_' + key)))[0],
+                #         y=list(data[item][key])[0],
+                #         color=self.def_data_names_col[key],
+                #         # kind='hist',
+                #         rot=0,
+                #     )
+                plot_data = data[item].copy()
+                plot_data.plot(
+                    ax=ax,
+                    kind='bar',
+                )
+                ax.set_xlabel(item)
+                ax.set_ylabel('magnitude')
+                ax.legend()
+                ax.grid('on')
+            fig.tight_layout()
+            plt.show()
+
+    def _display_fault_freq(self, ax, data_names):
         for item in self.fault_freq.keys():
-            for key, val in self.fault_freq[item].items():
+            for key in data_names:
                 self._additional_plot_instructions(
                     ax,
-                    {str(item + '_' + key): val},
+                    {str(item + '_' + key): self.fault_freq[item][key]},
                     label_text=True,
                     custom_col=self.def_data_names_col[key],
                     custom_style=self.fault_freq_style[item],
