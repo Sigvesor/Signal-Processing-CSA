@@ -142,7 +142,7 @@ class FaultAnalyzer:
                 range_freq,
                 self.fft_data[key],
             )
-            self.freq_h1[key] = int(np.mean(list(freq.values())))
+            self.freq_h1[key] = np.mean(list(freq.values()))
             self.magn_h1[key] = mx
 
     def _find_peak_freq(self, start_freq, range_freq, data):
@@ -401,6 +401,7 @@ class FaultAnalyzer:
                 self._display_fault_freq(ax, data_names)
             ax.legend(loc='upper right')
         ax2.set_xlabel('frequencies')
+        fig.tight_layout()
         plt.show()
 
     def plot_faults_comparison(self):
@@ -426,8 +427,8 @@ class FaultAnalyzer:
                     ax=ax,
                     kind='bar',
                 )
-                ax.set_xlabel(item)
-                ax.set_ylabel('magnitude')
+                # ax.set_xlabel(item)
+                ax.set_ylabel('magn. ' + item)
                 ax.legend()
                 ax.grid('on')
             fig.tight_layout()
