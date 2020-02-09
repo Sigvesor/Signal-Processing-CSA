@@ -23,16 +23,16 @@ tmp.plot_all_faults(
 )
 =======
 tmp = FaultAnalyzer(run_park_tr=False, run_fft=False, fault_display=fault_display, upper_freq_lim=1000,)
-tmp.plot_fault_in_one(
-    item='ip',
-    x_limit=300,
-    data_names=[
-        'h',
-        # 'f1',
-        'f2',
-        'f3',
-    ],
-    fault_freq_display=True,
+# tmp.plot_fault_in_one(
+#     item='ip',
+#     x_limit=300,
+#     data_names=[
+#         'h',
+#         # 'f1',
+#         'f2',
+#         'f3',
+#     ],
+#     fault_freq_display=True,
 )
 # tmp.plot_all_faults(
 #     fault_freq_display=True,
