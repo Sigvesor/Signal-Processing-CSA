@@ -2,3 +2,7 @@
 !*.py
 !*.pickle
 !.gitignore
+!*.svg
+!*.png
+!*.m
+!data_healthy.mat

@@ -27,7 +27,7 @@ tmp.plot_fault_in_one(
 #     x_limit=500,
 # )
 # tmp.plot_raw_data(
-#     data_names=['f1']
+#     data_names=['h']
 # )
 # tmp._find_significant_fault_val(fault_display)
-tmp.plot_faults_comparison()
+# tmp.plot_faults_comparison()

@@ -101,7 +101,7 @@ class FaultAnalyzer:
         park_data = {}
         for key in self.def_data_names:
             i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
-            i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/1) * data[2]
+            i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/2) * data[2]
             i_p = np.sqrt(i_d**2 + i_q**2)
             park_data[key] = {
                 'id': i_d,
@@ -125,7 +125,7 @@ class FaultAnalyzer:
             le = self.data_len[key]
             fft_data[key] = {}
             for idx in range(3):
-                fft = sp.fft(tmp[idx]) / le
+                fft = np.fft.fft(tmp[idx]) / le
                 fft = abs(fft[range(int(le / 2))])
                 tmp_fft.append(fft[:])
                 key2 = list(self.park_data[key].keys())
@@ -431,6 +431,7 @@ class FaultAnalyzer:
                 ax.set_ylabel('magn. ' + item)
                 ax.legend()
                 ax.grid('on')
+                # ax.set_ylim([0, 0.02])
             fig.tight_layout()
             plt.show()
 
