@@ -6,6 +6,8 @@ Created on Mon Jan 22 12:14:10 2020
 
 import pandas as pd
 import scipy as sp
+from scipy.fftpack import fft as spfft
+from scipy.fftpack import fftfreq as spfftfreq
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -18,12 +20,16 @@ class FaultAnalyzer:
             fault_display=None,
             upper_freq_lim=500
     ):
+        f1 = pd.read_pickle('fault1.pickle')
         self.data = {
             'h': pd.read_pickle('data_healthy.pickle'),
-            'f1': pd.read_pickle('fault1.pickle'),
+            'f1': f1.loc[
+                f1['t'] > 20
+            ].reset_index(drop=True),
             'f2': pd.read_pickle('fault2.pickle'),
             'f3': pd.read_pickle('fault3.pickle'),
         }
+        self.data['f1']['t'] -= self.data['f1']['t'][0]
         self.numpy_data = {}
         for key in self.data.keys():
             self.numpy_data[key] = self.data[key].transpose().iloc[1:].to_numpy()
@@ -100,8 +106,8 @@ class FaultAnalyzer:
         data = self.numpy_data
         park_data = {}
         for key in self.def_data_names:
-            i_d = np.sqrt(2/3) * data[0] - np.sqrt(1/6) * data[1] - np.sqrt(1/6) * data[2]
-            i_q = np.sqrt(1/2) * data[1] - np.sqrt(1/2) * data[2]
+            i_d = np.sqrt(2/3) * data[key][0] - np.sqrt(1/6) * data[key][1] - np.sqrt(1/6) * data[key][2]
+            i_q = np.sqrt(1/2) * data[key][1] - np.sqrt(1/2) * data[key][2]
             i_p = np.sqrt(i_d**2 + i_q**2)
             park_data[key] = {
                 'id': i_d,
@@ -123,14 +129,18 @@ class FaultAnalyzer:
             tmp = data[key]
             tmp_fft = []
             le = self.data_len[key]
+            if le % 2:
+                le -= 1
             fft_data[key] = {}
             for idx in range(3):
-                fft = np.fft.fft(tmp[idx]) / le
-                fft = abs(fft[range(int(le / 2))])
-                tmp_fft.append(fft[:])
+                fft = 2 * spfft(tmp[idx], le) / le
+                # fft = abs(fft[range(int(le / 2))])
+                fft = abs(fft)
+                fft = fft[range(int(le/2))]
+                # tmp_fft[idx] = fft
                 key2 = list(self.park_data[key].keys())
-                fft_data[key][key2[idx]] = tmp_fft[idx]
-            fft_data[key]['freq'] = np.fft.fftfreq(self.data_len[key], d=self.data_sp[key])[range(int(le / 2))]
+                fft_data[key][key2[idx]] = fft
+            fft_data[key]['freq'] = spfftfreq(self.data_len[key], d=self.data_sp[key])[range(int(le / 2))]
         return fft_data
 
     def _find_fundamental_el_freq(self, start_freq):
@@ -255,6 +265,7 @@ class FaultAnalyzer:
         self,
         fault_freq_display=None,
         x_limit=100,
+        data_names=None,
     ):
         """Plotting all available fft data in corresponding graph.
 
@@ -297,7 +308,7 @@ class FaultAnalyzer:
                 ax[key].set_xlim([-5, x_limit])
                 ax[key].set_ylim([None, 1.2 * mx[key]])
                 if fault_freq_display:
-                    self._display_fault_freq(ax[key])
+                    self._display_fault_freq(ax[key], data_names)
         plt.show()
 
     def plot_raw_data(self, data_names=None):
@@ -379,6 +390,7 @@ class FaultAnalyzer:
                 x=list(data_plot[key].filter(regex='freq'))[0],
                 y=list(data_plot[key].filter(regex=item))[0],
                 color=self.def_data_names_col[key],
+                # linewidth=.1
             )
             data_plot[key].plot(
                 ax=ax2,
@@ -395,11 +407,12 @@ class FaultAnalyzer:
                     custom_col=self.def_data_names_col[key]
                 )
             ax.grid('on')
-            ax.set_xlim([-5, x_limit])
+            ax.set_xlim([-.05, x_limit])
             ax.set_ylim([None, 1.2 * mx])
             if fault_freq_display:
                 self._display_fault_freq(ax, data_names)
             ax.legend(loc='upper right')
+        ax1.set_ylim([-.001, 1.2 * mx])
         ax2.set_xlabel('frequencies')
         fig.tight_layout()
         plt.show()
