@@ -1,31 +1,48 @@
-"""
-Created on Mon Jan 22 12:14:10 2020
-
-@author: Ernst
-"""
-
 import pandas as pd
+import numpy as np
 import scipy as sp
+import scipy.signal as sg
 from scipy.fftpack import fft as spfft
 from scipy.fftpack import fftfreq as spfftfreq
-import numpy as np
+import matplotlib as mp
 import matplotlib.pyplot as plt
 
+# Following code only needed for latex compatible plots
+# size = 20
+# pgf_with_latex = {                      # setup matplotlib to use latex for output
+#     "pgf.texsystem": "pdflatex",        # change this if using xetex or lautex
+#     "text.usetex": True,                # use LaTeX to write all text
+#     "font.family": 'serif',
+#     "font.serif": [],                   # blank entries should cause plots
+#     "font.sans-serif": [],              # to inherit fonts from the document
+#     "font.monospace": [],
+#     "axes.labelsize": size,               # LaTeX default is 10pt font.
+#     "font.size": size,
+#     "legend.fontsize": size,               # Make the legend/label fonts
+#     "xtick.labelsize": size,               # a little smaller
+#     "ytick.labelsize": size,
+#     # "figure.figsize": (12, 8),     # default fig size of 0.9 textwidth
+#     "pgf.preamble": [
+#         r"\usepackage[utf8x]{inputenc}",    # use utf8 fonts
+#         r"\usepackage[T1]{fontenc}",        # plots will be generated
+#         r"\usepackage[detect-all,locale=DE]{siunitx}",
+#         ]                                   # using this preamble
+#     }
+# # }}}
+# mp.rcParams.update(pgf_with_latex)
 
-class FaultAnalyzer:
-    def __init__(
-            self,
-            run_park_tr=False,
-            run_fft=False,
-            fault_display=None,
-            upper_freq_lim=500
-    ):
-        f1 = pd.read_pickle('fault1.pickle')
+
+def convert_data():
+    """Convert raw .mat data into compressed pickle."""
+    from raw_data.mat_to_pickle import to_pickle
+    to_pickle()
+
+
+class Analyzer:
+    def __init__(self, run_park_tr=False, run_fft=False, fault_display=['stf'], upper_freq_lim=500):
         self.data = {
             'h': pd.read_pickle('data_healthy.pickle'),
-            'f1': f1.loc[
-                f1['t'] > 20
-            ].reset_index(drop=True),
+            'f1': pd.read_pickle('fault1.pickle'),
             'f2': pd.read_pickle('fault2.pickle'),
             'f3': pd.read_pickle('fault3.pickle'),
         }
@@ -61,11 +78,6 @@ class FaultAnalyzer:
         self.numpy_park_data = {}
         self.fft_data = {}
         self._process_input(run_park_tr, run_fft, fault_display)
-        # print('         sample time  | sample length \n' +
-        #       'healthy |   ' + str(h_sp) + '     |  ' + str(h_n) + '\n' +
-        #       'fault1  |   ' + str(f1_sp) + '     |  ' + str(f1_n) + '\n' +
-        #       'fault2  |   ' + str(f2_sp) + '     |  ' + str(f2_n) + '\n' +
-        #       'fault3  |   ' + str(f3_sp) + '     |  ' + str(f3_n))
 
     def _process_input(self, run_park_tr, run_fft, fault_display):
         """Process data if needed."""
@@ -76,8 +88,6 @@ class FaultAnalyzer:
                 self.park_data[key].to_pickle(str('park_' + key + '.pickle'))
                 self.numpy_park_data[key] = self.park_data[key].transpose().to_numpy()
         elif run_fft:
-            # with open('park_data.pickle', 'rb') as handle:
-            #     self.park_data = pickle.load(handle)
             for key in self.def_data_names:
                 self.park_data[key] = pd.read_pickle(str('park_' + key + '.pickle'))
                 self.numpy_park_data[key] = self.park_data[key].transpose().to_numpy()
@@ -87,8 +97,6 @@ class FaultAnalyzer:
                 self.fft_data[key] = pd.DataFrame(fft_data[key])
                 self.fft_data[key].to_pickle(str('fft_' + key + '.pickle'))
         else:
-            # with open('fft_data.pickle', 'rb') as handle:
-            #     self.fft_data, self.freq_h1 = pickle.load(handle)
             for key in self.def_data_names:
                 self.fft_data[key] = pd.read_pickle(str('fft_' + key + '.pickle'))
         for key in self.def_data_names:
@@ -103,12 +111,13 @@ class FaultAnalyzer:
         self._find_significant_fault_val(fault_display)
 
     def _run_extended_park_transformation(self):
+        """Run extended park transformation."""
         data = self.numpy_data
         park_data = {}
         for key in self.def_data_names:
-            i_d = np.sqrt(2/3) * data[key][0] - np.sqrt(1/6) * data[key][1] - np.sqrt(1/6) * data[key][2]
-            i_q = np.sqrt(1/2) * data[key][1] - np.sqrt(1/2) * data[key][2]
-            i_p = np.sqrt(i_d**2 + i_q**2)
+            i_d = np.sqrt(2 / 3) * data[key][0] - np.sqrt(1 / 6) * data[key][1] - np.sqrt(1 / 6) * data[key][2]
+            i_q = np.sqrt(1 / 2) * data[key][1] - np.sqrt(1 / 2) * data[key][2]
+            i_p = np.sqrt(i_d ** 2 + i_q ** 2)
             park_data[key] = {
                 'id': i_d,
                 'iq': i_q,
@@ -127,17 +136,14 @@ class FaultAnalyzer:
         fft_data = {}
         for key in self.def_data_names:
             tmp = data[key]
-            tmp_fft = []
             le = self.data_len[key]
             if le % 2:
                 le -= 1
             fft_data[key] = {}
             for idx in range(3):
                 fft = 2 * spfft(tmp[idx], le) / le
-                # fft = abs(fft[range(int(le / 2))])
                 fft = abs(fft)
-                fft = fft[range(int(le/2))]
-                # tmp_fft[idx] = fft
+                fft = fft[range(int(le / 2))]
                 key2 = list(self.park_data[key].keys())
                 fft_data[key][key2[idx]] = fft
             fft_data[key]['freq'] = spfftfreq(self.data_len[key], d=self.data_sp[key])[range(int(le / 2))]
@@ -174,64 +180,7 @@ class FaultAnalyzer:
             'iq': tmp[1],
             'ip': tmp[2],
         }
-        # freq = tmp_data['freq'].loc[
-        #     int(np.mean(mx))
-        # ]
         return mx, freq
-
-    def _fault_freq_detection(self, fault_display):
-        """Evaluate fault frequencies.
-
-        Parameters
-        ----------
-        fault_display: list of str
-               Names of faults to display
-        """
-        faults = {
-            'bearing': self._fault_bearing,
-            'stf': self._fault_stf,
-        }
-        fault_freq = {}
-        fault_freq_style = {}
-        tmp_style = ['-.', ':', '-.-', '--']
-        idx = 0
-        for fault in fault_display:
-            fault_freq[fault] = faults[fault]()
-            fault_freq_style[fault] = tmp_style[idx]
-            idx += 1
-        return fault_freq, fault_freq_style
-
-    def _fault_stf(self):
-        """Short turn fault freq based on Chapter4/Slide20"""
-        tmp = {}
-        for key in self.def_data_names:
-            i = 1
-            val = 0
-            tmp[key] = []
-            while val < self.upper_freq_lim:
-                val = self.freq_h1[key] * i
-                tmp[key].append(val)
-                i += 1
-            # tmp[key] = [self.freq_h1[key] * k for k in range(1, 8)]
-        return tmp
-
-    def _fault_bearing(self):
-        """Bearing Fault frequencies based on Chapter4/Slide20."""
-        K = 0.4
-        N_b = 9
-        f_c = K * N_b * self.freq_mech
-        tmp = {}
-        for key in self.def_data_names:
-            f_s = self.freq_h1[key]
-            i = 1
-            val = 0
-            tmp[key] = []
-            while val < self.upper_freq_lim:
-                val = f_s + pow(-1, i) * int((i+1)/2) * f_c
-                tmp[key].append(val)
-                i += 1
-                # tmp[key] = [f_s + pow(-1, x) * int((x+1)/2) * f_c for x in range(1, 16)]
-        return tmp
 
     def _find_significant_fault_val(self, fault_display):
         """Compute magnitudes around calculated fault frequencies.
@@ -261,166 +210,109 @@ class FaultAnalyzer:
         self.magn_faults = magn_fault
         self.freq_faults = freq_fault
 
-    def plot_all_faults(
-        self,
-        fault_freq_display=None,
-        x_limit=100,
-        data_names=None,
-    ):
-        """Plotting all available fft data in corresponding graph.
+    def _fault_freq_detection(self, fault_display):
+        """Evaluate fault frequencies.
 
         Parameters
         ----------
-        fault_freq_display: bool
-            Display fault frequencies from 'self.fault_freq'
-        x_limit: float
-            Outer right limit for x axis.
+        fault_display: list of str
+               Names of faults to display
         """
-        data_plot = {}
-        data = self.fft_data
-        mx = {}
-        mi = {}
-        fig = {}
-        ax1 = {}
-        ax2 = {}
+        faults = {
+            'bearing': [],  # self._fault_bearing,
+            'stf': self._fault_stf,
+        }
+        fault_freq = {}
+        fault_freq_style = {}
+        tmp_style = ['-.', ':', '-.-', '--']
+        idx = 0
+        for fault in fault_display:
+            fault_freq[fault] = faults[fault]()
+            fault_freq_style[fault] = tmp_style[idx]
+            idx += 1
+        return fault_freq, fault_freq_style
+
+    def _fault_stf(self):
+        """Short turn fault freq based on Chapter4/Slide20"""
+        tmp = {}
         for key in self.def_data_names:
-            fig[key], (ax1[key], ax2[key]) = plt.subplots(2, 1)
-            data_plot[key] = data[key].copy()
-            mx[key] = data_plot[key].iloc[2:, 1:].max().max()
-            mi[key] = data_plot[key].min().min()
-            data_plot[key].plot(
-                ax=ax1[key],
-                x=list(data_plot[key].filter(regex='freq'))[0],
-                y=list(data_plot[key].filter(regex='i')),
-                title=str(key),
-            )
-            data_plot[key].plot(
-                ax=ax2[key],
-                x=list(data_plot[key].filter(regex='freq'))[0],
-                y=list(data_plot[key].filter(regex='i')),
-                logy=True
-            )
-            ax2[key].set_xlabel('frequencies')
-        for ax in ax1, ax2:
-            for key in ax.keys():
-                # ax[key].legend('upper right'),
-                ax[key].grid('on')
-                ax[key].set_xlim([-5, x_limit])
-                ax[key].set_ylim([None, 1.2 * mx[key]])
-                if fault_freq_display:
-                    self._display_fault_freq(ax[key], data_names)
-        plt.show()
+            i = 0
+            val = 0
+            tmp[key] = []
+            while val < self.upper_freq_lim:
+                val = self.freq_h1[key] * i
+                tmp[key].append(val)
+                i += 1
+        return tmp
 
-    def plot_raw_data(self, data_names=None):
-        """Plotting raw data."""
-        data_plot = {}
-        data = self.data
-        mx = {}
-        mi = {}
-        fig = {}
-        ax1 = {}
-        ax2 = {}
-        for key in data_names:
-            fig[key], (ax1[key], ax2[key]) = plt.subplots(2, 1)
-            data_plot[key] = data[key].copy()
-            mx[key] = data_plot[key].iloc[2:, 1:].max().max()
-            mi[key] = data_plot[key].min().min()
-            data_plot[key].plot(
-                ax=ax1[key],
-                x=list(data_plot[key].filter(regex='t'))[0],
-                y=list(data_plot[key].filter(regex='i')),
-                title=str(key),
+    def plot_stft(self, item=2):
+        """Plot stft of park components of all data sets."""
+        # loc = '../sigproc_report/'
+        fig = plt.figure(figsize=(24, 12))
+        gs = mp.gridspec.GridSpec(2, 3, figure=fig)
+        gs.set_width_ratios([2, 2, .2])
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax3 = fig.add_subplot(gs[0, 1])
+        ax4 = fig.add_subplot(gs[1, 1])
+        ax5 = fig.add_subplot(gs[:, 2])
+        axes = {'h': ax1, 'f1': ax2, 'f2': ax3, 'f3': ax4}
+        data = self.numpy_park_data
+        fault_names = {
+            'h': 'H',
+            'f1': 'F1',
+            'f2': 'F2',
+            'f3': 'F3',
+        }
+        components = {
+            0: '$i_d$',
+            1: '$i_q$',
+            2: '$i_p$',
+        }
+        for key in data.keys():
+            ax = axes[key]
+            fs = self.data_sp[key] ** -1
+            f, t, zxx = sg.stft(data[key][item], fs, nperseg=40000)
+            zxx = np.abs(zxx)
+            im = ax.pcolormesh(
+                t,
+                f,
+                zxx,
+                vmin=.0001,
+                vmax=.007,
+                cmap='copper_r',
+                edgecolors='None',
             )
-            data_plot[key].plot(
-                ax=ax2[key],
-                x=list(data_plot[key].filter(regex='t'))[0],
-                y=list(data_plot[key].filter(regex='i')),
-                logy=True
-            )
-            ax2[key].set_xlabel('frequencies')
-        for ax in ax1, ax2:
-            for key in ax.keys():
-                # ax[key].legend('upper right'),
-                ax[key].grid('on')
-                # ax[key].set_xlim([-5, x_limit])
-                # ax[key].set_ylim([None, 1.2 * mx[key]])
-        plt.show()
 
-    def plot_fault_in_one(
-        self,
-        item='ia',
-        data_names=('h', 'f1', 'f2', 'f3'),
-        x_limit=100,
-        fault_freq_display=False,
-    ):
-        """Plotting selected phases of all assigned fft data sets into one graph.
-
-        Parameters
-        ----------
-        item: str
-            Phase (current) to be displayed.
-        data_names: list of str
-            Data series (faults and/or healthy) to be displayed.
-        x_limit: float
-            Outer right limit for x axis.
-        fault_freq_display: bool
-            Display fault frequencies from 'self.fault_freq'
-        """
-        fig, (ax1, ax2) = plt.subplots(2, 1)
-        data_plot = {}
-        data = self.fft_data
-        mx = 0
-        mi = 0
-        for key in data_names:
-            # data_plot[key] = pd.DataFrame({
-            #     str('freq_' + key): data[key]['freq'].loc[(data[key]['freq'] <= 500)],
-            #     str(key + '_' + item): data[key][item].loc[(data[key]['freq'] <= 500)],
-            # })
-            data_plot[key] = pd.DataFrame({
-                str('freq_' + key): data[key]['freq'],
-                str(key + '_' + item): data[key][item],
-            })
-            mx_tmp = data[key][item][2:].max()
-            mi_tmp = data[key][item].min()
-            mx = mx_tmp if mx_tmp > mx else mx
-            mi = mi_tmp if mi_tmp < mi else mi
-        for key in data_plot:
-            data_plot[key].plot(
-                ax=ax1,
-                x=list(data_plot[key].filter(regex='freq'))[0],
-                y=list(data_plot[key].filter(regex=item))[0],
-                color=self.def_data_names_col[key],
-                # linewidth=.1
-            )
-            data_plot[key].plot(
-                ax=ax2,
-                x=list(data_plot[key].filter(regex='freq'))[0],
-                y=list(data_plot[key].filter(regex=item))[0],
-                color=self.def_data_names_col[key],
-                logy=True
-            )
-        for ax in ax1, ax2:
-            for key in self.def_data_names:
-                self._additional_plot_instructions(
-                    ax,
-                    {key: self.freq_h1[key]},
-                    custom_col=self.def_data_names_col[key]
-                )
-            ax.grid('on')
-            ax.set_xlim([-.05, x_limit])
-            ax.set_ylim([None, 1.2 * mx])
-            if fault_freq_display:
-                self._display_fault_freq(ax, data_names)
-            ax.legend(loc='upper right')
-        ax1.set_ylim([-.001, 1.2 * mx])
-        ax2.set_xlabel('frequencies')
+            ax.title.set_text(fault_names[key])
+            ax.set_ylim(0, 200)
+            ax.set_yticks([0, 50, 100, 150, 200])
+            if key == 'f3':
+                ax.set_xlabel('time (s)')
+            if key == 'h':
+                ax.set_ylabel('frequency (hz)')
+            if key == 'f1':
+                ax.set_ylabel('frequency (hz)')
+                ax.set_xlabel('time (s)')
+        fig.colorbar(im, cax=ax5)
+        ax5.set_ylabel(components[item] + ' amplitude (A)')
         fig.tight_layout()
         plt.show()
 
-    def plot_faults_comparison(self):
+    def plot_peak_comparison(self):
         """Plotting magnitudes of fault frequencies."""
+        # loc = '../sigproc_report/'
         for f in self.freq_faults.keys():
-            fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+            fig = plt.figure(figsize=(36, 24))
+            gs = mp.gridspec.GridSpec(3, 1, figure=fig)
+            ax1 = fig.add_subplot(gs[0, :])
+            ax2 = fig.add_subplot(gs[1, :])
+            ax3 = fig.add_subplot(gs[2, :])
+            components = {
+                'id': '$i_d$',
+                'iq': '$i_q$',
+                'ip': '$i_p$',
+            }
             magn = self.magn_faults[f]
             data = {}
             axes = {
@@ -431,7 +323,7 @@ class FaultAnalyzer:
             for item in magn.keys():
                 data[item] = pd.DataFrame(
                     magn[item],
-                    index=[str('h' + str(x)) for x in range(1, len(magn[item]['h']) + 1)],
+                    index=[str('$h_{' + str(x) + '}$') for x in range(0, len(magn[item]['h']))],
                 )
             for item in data.keys():
                 ax = axes[item]
@@ -440,46 +332,33 @@ class FaultAnalyzer:
                     ax=ax,
                     kind='bar',
                 )
-                # ax.set_xlabel(item)
-                ax.set_ylabel('magn. ' + item)
-                ax.legend()
+                ax.set_ylabel(components[item] + ' amplitude (A)')
+                ax.set_xlabel('harmonics')
+                names = {
+                    'h': 'H',
+                    'f1': 'F1',
+                    'f2': 'F2',
+                    'f3': 'F3',
+                }
+                ax.legend([val for val in names.values()])
                 ax.grid('on')
-                # ax.set_ylim([0, 0.02])
             fig.tight_layout()
             plt.show()
 
-    def _display_fault_freq(self, ax, data_names):
-        for item in self.fault_freq.keys():
-            for key in data_names:
-                self._additional_plot_instructions(
-                    ax,
-                    {str(item + '_' + key): self.fault_freq[item][key]},
-                    label_text=True,
-                    custom_col=self.def_data_names_col[key],
-                    custom_style=self.fault_freq_style[item],
-                )
 
-    def _additional_plot_instructions(self, ax, *data, label_text=False, custom_col=None, custom_style=None):
-        """Plot related, manages additional plotting instructions."""
-        for key, value in data[0].items():
-            self._axvlines(
-                value,
-                ax=ax,
-                color='k' if custom_col is None else custom_col,
-                linestyle='solid' if custom_style is None else custom_style,
-                lw=.5,
-                label=key if label_text else None,
-            )
+if __name__ == "__main__":
+    """if not existing, create .pickle data from .mat files
+    The .mat files have to inserted into 'raw_data' before execution."""
+    convert_data()
 
-    def _axvlines(self, xs, ax=None, **plot_kwargs):
-        """Plot related, creates vertical indicator lines."""
-        xs = sp.array((xs,) if sp.isscalar(xs) else xs, copy=False)
-        lims = ax.get_ylim()
-        x_points = sp.repeat(xs[:, None], repeats=3, axis=1).flatten()
-        y_points = sp.repeat(sp.array(lims + (sp.nan,))[None, :],
-                             repeats=len(xs), axis=0).flatten()
-        plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
-        return plot
-
-
-
+    """run Analyzer, possible execution of FFT and Park transformation necessary"""
+    obj = Analyzer(
+        run_park_tr=True,
+        run_fft=True,
+    )
+    """plot STFT, data only displayed, if object created with key 'run_fft=True'
+    set 'item=<int>' for component according to: 'ip'=2, 'iq'=1, 'id'=0"""
+    # obj.plot_stft(item=1)
+    [obj.plot_stft(item=i) for i in [0, 1, 2]]
+    """plot peak comparison of extended park vectors"""
+    obj.plot_peak_comparison()

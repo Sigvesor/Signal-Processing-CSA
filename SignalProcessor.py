@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import pi
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 from scipy.fftpack import fft
 
 N = 300000  # Samples
@@ -24,14 +24,13 @@ magn = np.ones(len(t))
 
 for idx, val in enumerate(freqs):
     for i in range(7):
-
         if i == 0:
             signals[idx] += np.sin(2 * pi * val[i] * t)
         else:
             signals[idx] += 0.15 * np.sin(2 * pi * val[i] * t)
             # signals[idx] += magn * 0.15*np.sin(2*pi*val[i]*t)
 
-if 1:
+if 0:
     plt.figure(figsize=(18, 16))
 
     plt.subplot(3, 1, 1)
@@ -44,7 +43,7 @@ if 1:
     plt.plot(t, signals[2])
     plt.show()
 
-if 1:
+if 0:
     plt.figure(figsize=(18, 16))
     a = 0.15*np.sin(2*pi*650*t)
     print(max(a))
@@ -57,10 +56,26 @@ if 1:
     fft_2 = 2 * (abs(fft(signals[1] / len(t))))[:int(len(t) / 2)]
     fft_3 = 2 * (abs(fft(signals[2] / len(t))))[:int(len(t) / 2)]
 
-    plt.figure(figsize=(18, 16))
-    plt.plot(fft_1, label="1")
-    plt.plot(fft_2, label="2")
-    plt.plot(fft_3, label="3")
-    plt.xlim([0, 2100])
-    plt.legend()
-    plt.show()
+    def thd(abs_data):
+        sq_sum=0.0
+        for r in range(abs(fft_1)):
+            sq_sum = sq_sum + (abs(fft_1[r])**2)
+
+        sq_harmonics = sq_sum - (max(abs(fft_1)))**2.0
+        thd = 100*sq_harmonics**0.5 / max(abs(fft_1))
+
+        return thd
+
+    print("Total Harmonic Distortion(in percent):")
+    print(thd(signals[0][1:int(len(signals[0])/2)]))
+
+    #plt.figure(figsize=(18, 16))
+    #plt.plot(fft_1, label="1")
+    #plt.plot(fft_2, label="2")
+    #plt.plot(fft_3, label="3")
+    #plt.xlim([0, 2100])
+    #plt.legend()
+    #plt.show()
+
+
+
